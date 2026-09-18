@@ -17,6 +17,7 @@ from pathlib import Path
 
 import torch
 from diffusers import AnimateDiffPipeline, DDIMScheduler, MotionAdapter
+from diffusers.models.attention_processor import SlicedAttnProcessor
 from diffusers.utils import export_to_gif
 from safetensors.torch import load_file
 
@@ -39,6 +40,13 @@ def build_pipeline(device):
         unet=unet, motion_adapter=motion_adapter, scheduler=scheduler,
     )
     pipe.to(device)
+    # MPS has no memory-efficient attention kernel like CUDA does, so the first full-resolution
+    # self-attention block (16 frames x CFG batch of 2, 64x64) tries to materialize a ~16GiB
+    # attention matrix and OOMs. pipe.enable_attention_slicing() is a no-op here — it only touches
+    # pipeline components that define their own set_attention_slice(), and UNetMotionModel doesn't
+    # — so slice every attention block directly instead, forcing them one batch element at a time.
+    if device == "mps":
+        unet.set_attn_processor(SlicedAttnProcessor(1))
     return pipe
 
 

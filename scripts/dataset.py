@@ -23,8 +23,15 @@ from torchvision import transforms
 from torchvision.transforms import functional as F
 
 WINDOWS_DIR = Path("data/windows")
+EXCLUDED_PATH = Path("data/excluded_windows.txt")  # one window_id per line; see scripts/relabel_windows.py
 TOKENIZER_NAME = "openai/clip-vit-large-patch14"  # SD1.5's text encoder tokenizer
 TOKENIZER_MAX_LENGTH = 77
+
+
+def load_excluded_windows(path: Path = EXCLUDED_PATH) -> set:
+    if not path.exists():
+        return set()
+    return {line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()}
 
 
 class WindowDataset(Dataset):
@@ -52,12 +59,16 @@ class WindowDataset(Dataset):
         self.resize_mode = resize_mode
         self.augment = augment  # random crop placement instead of center crop (train split only)
 
+        excluded = load_excluded_windows()
         self.window_dirs = sorted(
             d for d in self.windows_dir.iterdir()
-            if d.is_dir() and (d / "caption.txt").exists() and (d / "frames").is_dir()
+            if d.is_dir() and d.name not in excluded
+            and (d / "caption.txt").exists() and (d / "frames").is_dir()
         )
         if not self.window_dirs:
             raise RuntimeError(f"no windows with caption.txt + frames/ found under {self.windows_dir}")
+        if excluded:
+            print(f"WindowDataset: skipping {len(excluded)} window(s) listed in {EXCLUDED_PATH}")
 
         if tokenizer is None:
             from transformers import CLIPTokenizer

@@ -7,3 +7,7 @@ outputs/
 *.ckpt
 *.safetensors
 *.pt
+checkpoints/
+data/raw/
+data/processed/
+data/windows/
